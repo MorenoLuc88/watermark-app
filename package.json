@@ -14,7 +14,12 @@
     "forceCodeSigning": false,
     "win": {
       "target": [
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "sign": null,
       "signingHashAlgorithms": null,
@@ -24,9 +29,6 @@
       "**/*",
       "!node_modules/electron-builder/**",
       "!*.md"
-    ],
-    "extraResources": [
-      { "from": "assets/", "to": "assets/", "filter": ["**/*"] }
     ]
   },
   "dependencies": {

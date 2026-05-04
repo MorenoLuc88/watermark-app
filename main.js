@@ -30,6 +30,59 @@ app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 
+// Chemin du fichier de config utilisateur
+function getConfigPath() {
+  return path.join(app.getPath('userData'), 'wm-config.json');
+}
+
+function loadConfig() {
+  try {
+    const p = getConfigPath();
+    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch {}
+  return {};
+}
+
+function saveConfig(data) {
+  try {
+    fs.writeFileSync(getConfigPath(), JSON.stringify(data, null, 2));
+  } catch {}
+}
+
+// Retourner les chemins des filigranes (config ou assets par defaut)
+ipcMain.handle('get-watermark-paths', () => {
+  const config = loadConfig();
+  const assetsPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'assets')
+    : path.join(__dirname, 'assets');
+
+  const whitePath = config.wmWhite || path.join(assetsPath, 'Signature_Blanc.png');
+  const blackPath = config.wmBlack || path.join(assetsPath, 'Signature_noir.png');
+
+  return {
+    white: fs.existsSync(whitePath) ? whitePath : null,
+    black: fs.existsSync(blackPath) ? blackPath : null,
+  };
+});
+
+// Choisir un filigrane manuellement
+ipcMain.handle('select-watermark', async (event, color) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selectionner le filigrane ' + color,
+    filters: [{ name: 'PNG', extensions: ['png'] }],
+    properties: ['openFile']
+  });
+  if (result.canceled) return null;
+
+  const selectedPath = result.filePaths[0];
+  const config = loadConfig();
+  if (color === 'white') config.wmWhite = selectedPath;
+  else config.wmBlack = selectedPath;
+  saveConfig(config);
+
+  return selectedPath;
+});
+
 ipcMain.handle('select-photos', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Selectionner des photos',
@@ -59,23 +112,14 @@ ipcMain.handle('select-input-dir', async () => {
     return fs.readdirSync(dir)
       .filter(f => exts.includes(path.extname(f).toLowerCase()))
       .map(f => path.join(dir, f));
-  } catch(e) {
-    return [];
-  }
+  } catch { return []; }
 });
 
 async function analyzeLuminosity(imagePath, x, y, w, h) {
   try {
     const { data } = await sharp(imagePath)
-      .extract({
-        left:   Math.max(0, Math.round(x)),
-        top:    Math.max(0, Math.round(y)),
-        width:  Math.max(1, Math.round(w)),
-        height: Math.max(1, Math.round(h))
-      })
-      .greyscale()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
+      .extract({ left: Math.max(0, Math.round(x)), top: Math.max(0, Math.round(y)), width: Math.max(1, Math.round(w)), height: Math.max(1, Math.round(h)) })
+      .greyscale().raw().toBuffer({ resolveWithObject: true });
     let sum = 0;
     for (let i = 0; i < data.length; i++) sum += data[i];
     return sum / data.length;
@@ -107,7 +151,6 @@ ipcMain.handle('process-photo', async (event, { inputPath, outputPath, options }
       case 'center':        x = Math.round((imgW - wmW) / 2); y = Math.round((imgH - wmH) / 2); break;
       default:              x = imgW - wmW - m; y = imgH - wmH - m;
     }
-
     x = Math.max(0, Math.min(x, imgW - wmW));
     y = Math.max(0, Math.min(y, imgH - wmH));
 
@@ -116,25 +159,13 @@ ipcMain.handle('process-photo', async (event, { inputPath, outputPath, options }
     const wmPath = useWhite ? wmWhitePath : wmBlackPath;
 
     const opacityFactor = opacity / 100;
-
-    // Redimensionner le filigrane en conservant la transparence PNG
-    const wmRaw = await sharp(wmPath)
-      .resize(wmW, wmH, { fit: 'fill' })
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-
-    // Modifier uniquement le canal alpha pour l'opacite
+    const wmRaw = await sharp(wmPath).resize(wmW, wmH, { fit: 'fill' }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     const { data: wmData, info: wmInfo } = wmRaw;
     for (let i = 3; i < wmData.length; i += 4) {
       wmData[i] = Math.round(wmData[i] * opacityFactor);
     }
+    const wmResized = await sharp(wmData, { raw: { width: wmInfo.width, height: wmInfo.height, channels: 4 } }).png().toBuffer();
 
-    const wmResized = await sharp(wmData, {
-      raw: { width: wmInfo.width, height: wmInfo.height, channels: 4 }
-    }).png().toBuffer();
-
-    // Assurer que le dossier de sortie existe
     const outDir = path.dirname(outputPath);
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
@@ -159,9 +190,8 @@ ipcMain.handle('open-folder', async (event, folderPath) => {
   shell.openPath(folderPath);
 });
 
+// Conserver pour compatibilite
 ipcMain.handle('get-assets-path', () => {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'assets');
-  }
+  if (app.isPackaged) return path.join(process.resourcesPath, 'assets');
   return path.join(__dirname, 'assets');
 });

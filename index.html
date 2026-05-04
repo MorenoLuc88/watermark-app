@@ -408,22 +408,19 @@
     <div>
       <div class="section-title">Filigranes</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
-        <div class="wm-status">
-          <div class="wm-dot" id="dot-white"></div>
-          <div>
-            <div style="font-size:11px;color:var(--text2);">Signature blanc</div>
-            <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;" id="wm-white-name">non chargé</div>
+        <button class="btn" id="btn-wm-white" style="gap:8px;">
+          <div class="wm-dot" id="dot-white" style="flex-shrink:0;margin:0;"></div>
+          <div style="text-align:left;">
+            <div style="font-size:11px;">Filigrane blanc</div>
+            <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;" id="wm-white-name">cliquer pour choisir</div>
           </div>
-        </div>
-        <div class="wm-status">
-          <div class="wm-dot" id="dot-black"></div>
-          <div>
-            <div style="font-size:11px;color:var(--text2);">Signature noir</div>
-            <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;" id="wm-black-name">non chargé</div>
+        </button>
+        <button class="btn" id="btn-wm-black" style="gap:8px;">
+          <div class="wm-dot" id="dot-black" style="flex-shrink:0;margin:0;"></div>
+          <div style="text-align:left;">
+            <div style="font-size:11px;">Filigrane noir</div>
+            <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;" id="wm-black-name">cliquer pour choisir</div>
           </div>
-        </div>
-        <button class="btn small" id="btn-load-wm" style="width:auto;margin-top:2px;">
-          <span class="icon">🔄</span> Charger les filigranes
         </button>
       </div>
     </div>
