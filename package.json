@@ -1,0 +1,39 @@
+{
+  "name": "luc-moreno-watermark",
+  "version": "1.0.0",
+  "description": "Application de filigrane automatique - Luc Moreno Photographe",
+  "author": "Luc Moreno",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.lucmoreno.watermark",
+    "productName": "LM Watermark",
+    "forceCodeSigning": false,
+    "win": {
+      "target": [
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "sign": null,
+      "signingHashAlgorithms": null,
+      "certificateFile": null
+    },
+    "files": [
+      "**/*",
+      "!node_modules/electron-builder/**",
+      "!*.md"
+    ],
+    "extraResources": [
+      { "from": "assets/", "to": "assets/", "filter": ["**/*"] }
+    ]
+  },
+  "dependencies": {
+    "sharp": "^0.33.2"
+  },
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.9.1"
+  }
+}
