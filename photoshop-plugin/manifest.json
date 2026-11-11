@@ -2,7 +2,7 @@
   "manifestVersion": 5,
   "id": "com.lucmoreno.signature",
   "name": "LM Signature",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "main": "index.html",
   "host": {
     "app": "PS",

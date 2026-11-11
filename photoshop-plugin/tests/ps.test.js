@@ -263,3 +263,19 @@ test('bout en bout : invert passe de blanc à noir en gardant la position du cal
   assert.strictEqual(after.bounds.left, before.left);
   assert.strictEqual(after.bounds.top, before.top);
 });
+
+test("detectLayerColor limite la lecture au cadre de l'image quand la signature déborde", async () => {
+  const sig = makeLayer({ id: 9, name: 'Signature LM', kind: 'smartObject', bounds: { left: -100, top: 5300, right: 700, bottom: 5600 } });
+  const doc = makeDoc({ layers: [sig] });
+  const host = makeHost({ doc, pixels: { components: 4, width: 1, height: 1, data: Uint8Array.from([255, 255, 255, 255]) } });
+  assert.strictEqual(await createPs(host).detectLayerColor(doc, 9), 'white');
+  assert.deepStrictEqual(host.getPixelsArgs[0].sourceBounds, { left: 0, top: 5300, right: 700, bottom: 5472 });
+});
+
+test("detectLayerColor garde les bornes du calque s'il est entièrement hors du cadre", async () => {
+  const sig = makeLayer({ id: 9, name: 'Signature LM', kind: 'smartObject', bounds: { left: 4000, top: 100, right: 4800, bottom: 335 } });
+  const doc = makeDoc({ layers: [sig] });
+  const host = makeHost({ doc, pixels: { components: 4, width: 1, height: 1, data: Uint8Array.from([0, 0, 0, 255]) } });
+  assert.strictEqual(await createPs(host).detectLayerColor(doc, 9), 'black');
+  assert.deepStrictEqual(host.getPixelsArgs[0].sourceBounds, { left: 4000, top: 100, right: 4800, bottom: 335 });
+});

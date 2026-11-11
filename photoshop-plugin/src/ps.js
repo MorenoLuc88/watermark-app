@@ -104,12 +104,19 @@ function createPs({ photoshop, uxp }) {
     // Couleur d'une signature déjà posée, d'après ses pixels
     detectLayerColor(doc, layerId) {
       return inModal('Lire la signature', async () => {
-        const layer = findLayer(liveDocument(doc).layers, l => l.id === layerId);
+        const live = liveDocument(doc);
+        const layer = findLayer(live.layers, l => l.id === layerId);
         const b = layer.bounds;
+        // Luc a pu déplacer la signature en partie hors de l'image : on ne lit que ce qui est dans le cadre
+        const clamped = {
+          left: Math.max(0, b.left), top: Math.max(0, b.top),
+          right: Math.min(live.width, b.right), bottom: Math.min(live.height, b.bottom),
+        };
+        const inside = clamped.right > clamped.left && clamped.bottom > clamped.top;
         const { pixels, channels } = await readPixels({
           documentID: doc.id,
           layerID: layerId,
-          sourceBounds: { left: b.left, top: b.top, right: b.right, bottom: b.bottom },
+          sourceBounds: inside ? clamped : { left: b.left, top: b.top, right: b.right, bottom: b.bottom },
           colorSpace: 'RGB',
           componentSize: 8,
         });

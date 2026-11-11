@@ -1,12 +1,28 @@
 // Fabrique le paquet .ccx (archive ZIP) du plugin, installable d'un double-clic via Creative Cloud.
 //   node photoshop-plugin/tools/pack.js   → dist-plugin/LM-Signature-<version>.ccx
-// Même méthode que le plugin Backdrop Clean (ZIP écrit à la main, sans dépendance). Nécessite Node 22+ (zlib.crc32).
+// Même méthode que le plugin Backdrop Clean (ZIP écrit à la main, sans dépendance).
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 
 const PLUGIN_ROOT = path.join(__dirname, '..');
 const OUT_DIR = path.join(PLUGIN_ROOT, '..', 'dist-plugin');
+
+// CRC-32 (polynôme 0xEDB88320). zlib.crc32 n'existe que depuis Node 20.15 / 22.2 : repli pour les Node plus anciens.
+const CRC_TABLE = new Uint32Array(256);
+for (let n = 0; n < 256; n++) {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+  CRC_TABLE[n] = c >>> 0;
+}
+
+function crc32Fallback(buf) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+const crc32 = (buf) => (typeof zlib.crc32 === 'function' ? zlib.crc32(buf) : crc32Fallback(buf));
 
 // Liste récursive des fichiers de `root` (chemins relatifs avec /). `exclude` : dossiers de premier niveau à ignorer.
 function listPackageFiles(root, exclude = []) {
@@ -31,7 +47,7 @@ function buildZip(files) {
   for (const { name, data } of files) {
     const nameBuf = Buffer.from(name.replace(/\\/g, '/'), 'utf8');
     const comp = zlib.deflateRawSync(data, { level: 9 });
-    const crc = zlib.crc32(data);
+    const crc = crc32(data);
 
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
@@ -80,4 +96,4 @@ function pack() {
 
 if (require.main === module) pack();
 
-module.exports = { buildZip, listPackageFiles, pack };
+module.exports = { buildZip, listPackageFiles, pack, crc32Fallback };

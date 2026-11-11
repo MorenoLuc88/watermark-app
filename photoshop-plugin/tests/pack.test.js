@@ -62,3 +62,23 @@ test('listPackageFiles n\'exclut que les dossiers de premier niveau demandés', 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('crc32 fonctionne sans zlib.crc32 (Node 18 ou vieux Node 20) et donne le CRC standard', () => {
+  const { crc32Fallback } = require('../tools/pack.js');
+  assert.strictEqual(crc32Fallback(Buffer.from('123456789')), 0xCBF43926); // valeur de référence du CRC-32
+  assert.strictEqual(crc32Fallback(Buffer.alloc(0)), 0);
+  const data = Buffer.from(Array.from({ length: 5000 }, (_, i) => (i * 31 + 7) & 255));
+  if (typeof zlib.crc32 === 'function') assert.strictEqual(crc32Fallback(data), zlib.crc32(data));
+});
+
+test('buildZip donne la même archive que zlib.crc32 soit disponible ou non', () => {
+  const files = [{ name: 'a.txt', data: Buffer.from('bonjour') }, { name: 'b/c.bin', data: Buffer.alloc(3000, 9) }];
+  const withNative = buildZip(files);
+  const original = zlib.crc32;
+  zlib.crc32 = undefined; // simule un Node sans zlib.crc32
+  try {
+    assert.ok(buildZip(files).equals(withNative));
+  } finally {
+    zlib.crc32 = original;
+  }
+});
