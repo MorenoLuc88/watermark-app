@@ -33,7 +33,9 @@
       "!node_modules/electron-builder/**",
       "!*.md",
       "!photoshop-plugin/**",
-      "!docs/**"
+      "!docs/**",
+      "!dist-plugin/**",
+      "!.superpowers/**"
     ]
   },
   "dependencies": {
