@@ -45,7 +45,7 @@ photoshop-plugin/
   index.html                       Tâche 8   panneau
   assets/Signature_Blanc.png       Tâche 1   copie de Y:\
   assets/Signature_noir.png        Tâche 1
-  assets/signature-profile.js      Tâche 3   généré (masque alpha réduit + luminances)
+  assets/signature-profile.js      Tâche 3   généré (masque alpha + luminances)
   src/profile.js                   Tâche 3   decodeProfile, loadProfile
   src/placement.js                 Tâche 4   computeBox
   src/contrast.js                  Tâche 5   chooseColor
@@ -110,12 +110,12 @@ Photoshop ne peut pas décoder un PNG en JavaScript pur sans `sharp` : un outil 
 **Interfaces :**
 - Produit : `decodeProfile(raw) -> Profile` et `loadProfile() -> Profile` (dans `src/profile.js`), avec
   `Profile = { width: number, height: number, mask: { width: number, height: number, alpha: Uint8Array }, luminance: { white: number, black: number } }`.
-  `width/height` = dimensions du PNG (820 × 304). `mask` = alpha réduit au quart (205 × 76). `luminance` = luminance **linéaire** (0–1) moyenne des pixels opaques, pondérée par l'alpha, de chaque PNG.
+  `width/height` = dimensions du PNG (820 × 304). `mask` = alpha plein format (820 × 304, rééchantillonné par Lanczos-3 dans `contrast.js`). `luminance` = luminance **linéaire** (0–1) moyenne des pixels opaques, pondérée par l'alpha, de chaque PNG.
 - `assets/signature-profile.js` exporte (`module.exports`) l'objet brut `{ width, height, maskWidth, maskHeight, alphaBase64, luminance: { white, black } }`.
 
-- [ ] **Étape 1 : écrire le test qui échoue** `profile.test.js` : `loadProfile()` renvoie `width 820`, `height 304`, `mask.width 205`, `mask.height 76`, `mask.alpha.length === 205 * 76` ; `luminance.white > 0.95` et `luminance.black < 0.05` ; au moins 3 % et au plus 60 % des valeurs du masque sont non nulles (la signature est un tracé fin : l'alpha moyen d'un bloc peut rester sous 128, donc ne pas seuiller à 128) ; le masque est vide dans les 20 premières colonnes (marge gauche transparente).
+- [ ] **Étape 1 : écrire le test qui échoue** `profile.test.js` : `loadProfile()` renvoie `width 820`, `height 304`, `mask.width 820`, `mask.height 304`, `mask.alpha.length === 820 * 304` ; `luminance.white > 0.95` et `luminance.black < 0.05` ; au moins 3 % et au plus 60 % des valeurs du masque sont non nulles (la signature est un tracé fin : l'alpha moyen d'un bloc peut rester sous 128, donc ne pas seuiller à 128) ; le masque est vide dans les 80 premières colonnes (marge gauche transparente).
 - [ ] **Étape 2 :** Lancer `npm run test:plugin`. Attendu : échec (`profile.js` absent).
-- [ ] **Étape 3 :** Écrire `tools/build-signature-profile.js` (Node + `sharp`) : lit les deux PNG, réduit l'alpha au quart (moyenne par bloc 4 × 4), calcule les luminances avec la même formule que `processor.js` (table sRGB linéaire, `0.2126 / 0.7152 / 0.0722`), écrit `assets/signature-profile.js`. L'exécuter (`node photoshop-plugin/tools/build-signature-profile.js`).
+- [ ] **Étape 3 :** Écrire `tools/build-signature-profile.js` (Node + `sharp`) : lit les deux PNG, copie l'alpha plein format, calcule les luminances avec la même formule que `processor.js` (table sRGB linéaire, `0.2126 / 0.7152 / 0.0722`), écrit `assets/signature-profile.js`. L'exécuter (`node photoshop-plugin/tools/build-signature-profile.js`).
 - [ ] **Étape 4 :** Écrire `src/profile.js` : `decodeProfile` décode le base64 en `Uint8Array` **sans API Node** (pas de `Buffer` : utiliser `atob`, disponible dans UXP) ; `loadProfile` appelle `decodeProfile(require("../assets/signature-profile.js"))`.
 - [ ] **Étape 5 :** Lancer les tests. Attendu : tous passent.
 - [ ] **Étape 6 :** Commit `feat(plugin): precomputed signature profile (alpha mask, luminances)`.
@@ -152,13 +152,13 @@ Photoshop ne peut pas décoder un PNG en JavaScript pur sans `sharp` : un outil 
 
 - [ ] **Étape 1 : écrire les tests qui échouent** (`contrast.test.js`), avec des images synthétiques `sharp` et les vraies signatures :
   - `fond sombre → white`, `fond clair → black`.
-  - **Parité avec l'appli** : pour fond sombre, clair, gris moyen (118) et moitié sombre / moitié claire (colonne blanche couvrant plus de 50 % de la zone), `chooseColor` donne la même couleur que `processPhoto` de `../../processor.js` (lancé avec les PNG de `assets/`), et chaque score est à moins de **0,15** du `contrast` renvoyé par `processPhoto`.
+  - **Parité avec l'appli** : pour fond sombre, clair, gris moyen (118) et moitié sombre / moitié claire (colonne blanche couvrant plus de 50 % de la zone), `chooseColor` donne la même couleur que `processPhoto` de `../../processor.js` (lancé avec les PNG de `assets/`), et chaque score est à moins de **0,05** du `contrast` renvoyé par `processPhoto`.
   - **Focus 5** : un tampon RGBA entièrement transparent (alpha 0) est traité comme **blanc** → `color === "black"`.
   - Un pixel RGBA semi-transparent est mélangé sur du blanc avant le calcul.
   - `opacity 100` et `opacity 40` donnent la même couleur sur un fond très sombre ; les scores à 40 sont inférieurs à ceux à 100.
 - [ ] **Étape 2 :** Lancer les tests. Attendu : échec.
-- [ ] **Étape 3 :** Implémenter `chooseColor` en portant `scoreReadability` de `processor.js` : pour chaque pixel de la zone, retrouver sa valeur dans le masque réduit par **plus proche voisin** (`mx = floor(x * mask.width / width)`) ; aplatir l'alpha de l'image sur du blanc si `channels === 4` ; calcul identique (luminance linéaire du fond, mélange selon `alpha * opacité`, ratio WCAG plafonné à 4,5, moyenne pondérée) ; `luminance` de chaque signature vient du profil ; blanc gagne si `scores.white >= scores.black`. `luma` = luminosité moyenne pondérée sur 0–255 (comme `processor.js`).
-- [ ] **Étape 4 :** Lancer les tests. Si un écart de score dépasse 0,15, corriger le portage (pas le seuil).
+- [ ] **Étape 3 :** Implémenter `chooseColor` en portant `scoreReadability` de `processor.js` : pour chaque pixel de la zone, rééchantillonner le masque à la taille de la zone avec **Lanczos-3 séparable** (noyau élargi en réduction, comme sharp : indispensable pour retrouver les scores de l'appli) puis lire l'alpha de chaque pixel ; aplatir l'alpha de l'image sur du blanc si `channels === 4` ; calcul identique (luminance linéaire du fond, mélange selon `alpha * opacité`, ratio WCAG plafonné à 4,5, moyenne pondérée) ; `luminance` de chaque signature vient du profil ; blanc gagne si `scores.white >= scores.black`. `luma` = luminosité moyenne pondérée sur 0–255 (comme `processor.js`).
+- [ ] **Étape 4 :** Lancer les tests. Si un écart de score dépasse 0,05, corriger le portage (pas le seuil).
 - [ ] **Étape 5 :** Commit `feat(plugin): contrast-based colour choice (parity with app)`.
 
 ---

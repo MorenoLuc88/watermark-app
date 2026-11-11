@@ -6,7 +6,6 @@ const path = require('node:path');
 const sharp = require('sharp');
 
 const assets = path.join(__dirname, '..', 'assets');
-const BLOCK = 4; // le masque est réduit au quart
 
 // Même formule que processor.js : sRGB (0-255) -> luminance linéaire (0-1)
 function toLinear(v) {
@@ -32,20 +31,11 @@ function meanLuminance({ data, width, height }) {
   return weight > 0 ? sum / weight : 0;
 }
 
-// Alpha moyen par bloc BLOCK x BLOCK
-function reduceAlpha({ data, width, height }) {
-  const mw = Math.floor(width / BLOCK), mh = Math.floor(height / BLOCK);
-  const out = new Uint8Array(mw * mh);
-  for (let my = 0; my < mh; my++) {
-    for (let mx = 0; mx < mw; mx++) {
-      let s = 0;
-      for (let dy = 0; dy < BLOCK; dy++) {
-        for (let dx = 0; dx < BLOCK; dx++) s += data[((my * BLOCK + dy) * width + mx * BLOCK + dx) * 4 + 3];
-      }
-      out[my * mw + mx] = Math.round(s / (BLOCK * BLOCK));
-    }
-  }
-  return { alpha: out, maskWidth: mw, maskHeight: mh };
+// Alpha plein format : le rééchantillonnage à la taille de la zone se fait dans le plugin (Lanczos-3, comme sharp).
+function fullAlpha({ data, width, height }) {
+  const out = new Uint8Array(width * height);
+  for (let i = 0; i < width * height; i++) out[i] = data[i * 4 + 3];
+  return { alpha: out, maskWidth: width, maskHeight: height };
 }
 
 (async () => {
@@ -54,7 +44,7 @@ function reduceAlpha({ data, width, height }) {
   if (white.width !== black.width || white.height !== black.height) {
     throw new Error('Les deux signatures doivent avoir les mêmes dimensions');
   }
-  const { alpha, maskWidth, maskHeight } = reduceAlpha(white);
+  const { alpha, maskWidth, maskHeight } = fullAlpha(white);
   const profile = {
     width: white.width,
     height: white.height,
