@@ -1,4 +1,4 @@
-// ESSAI JETABLE (Tache 2 du plan) : verifie le comportement reel de Photoshop 26 / UXP.
+// ESSAI JETABLE (Tache 2 du plan), v0.0.2 : verifie le comportement reel de Photoshop / UXP.
 // Rien ici n'est conserve dans le plugin final.
 const { app, core, action, imaging, constants } = require('photoshop');
 const { storage } = require('uxp');
@@ -7,7 +7,7 @@ const out = document.getElementById('out');
 let journal = '';
 
 async function persist() {
-  // Le journal est aussi ecrit dans le dossier de donnees du plugin, pour pouvoir etre relu sans copier-coller.
+  // Le journal est ecrit dans le dossier de donnees du plugin, pour etre relu sans copier-coller.
   try {
     const folder = await storage.localFileSystem.getDataFolder();
     const file = await folder.createFile('spike-log.txt', { overwrite: true });
@@ -38,7 +38,7 @@ function doc() {
   return d;
 }
 
-// Zone en bas a droite, comme le plugin final : 30 % du petit cote, marge 30 px, ratio 820 x 304.
+// Boite complete de la signature (PNG 820 x 304, marges transparentes comprises) : 30 % du petit cote, marge 30 px.
 function targetBox(d) {
   const width = Math.round(Math.min(d.width, d.height) * 0.30);
   const height = Math.round(width * 304 / 820);
@@ -47,33 +47,19 @@ function targetBox(d) {
   return { left, top, width, height, right: left + width, bottom: top + height };
 }
 
-async function readPixels(label, extra) {
-  const d = doc();
-  const b = targetBox(d);
-  const options = Object.assign({
-    documentID: d.id,
-    sourceBounds: { left: b.left, top: b.top, right: b.right, bottom: b.bottom },
-    colorSpace: 'RGB',
-    componentSize: 8,
-    colorProfile: 'sRGB IEC61966-2.1',
-  }, extra);
-  let result;
-  await core.executeAsModal(async () => {
-    result = await imaging.getPixels(options);
-    const img = result.imageData;
-    const data = await img.getData({ chunky: true });
-    let r = 0, g = 0, bl = 0, n = 0;
-    const comps = img.components;
-    for (let i = 0; i + comps - 1 < data.length; i += comps) { r += data[i]; g += data[i + 1]; bl += data[i + 2]; n++; }
-    log(label, {
-      zone: b,
-      imageData: { width: img.width, height: img.height, components: comps, colorSpace: String(img.colorSpace), componentSize: img.componentSize, hasAlpha: img.hasAlpha },
-      dataLength: data.length,
-      moyenneRVB: [Math.round(r / n), Math.round(g / n), Math.round(bl / n)],
-      sourceBoundsRendu: result.sourceBounds,
-    });
-    img.dispose();
-  }, { commandName: 'Essai lecture pixels' });
+// Zone du texte visible dans le PNG (alpha > 0), en pixels du PNG 820 x 304.
+const CONTENT = { left: 104, top: 64, width: 600, height: 176 };
+
+function averageRgb(img, data, onlyOpaque) {
+  const comps = img.components;
+  let r = 0, g = 0, b = 0, n = 0, amin = 255, amax = 0;
+  for (let i = 0; i + comps - 1 < data.length; i += comps) {
+    const a = comps === 4 ? data[i + 3] : 255;
+    if (comps === 4) { amin = Math.min(amin, a); amax = Math.max(amax, a); }
+    if (onlyOpaque && a < 128) continue;
+    r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
+  }
+  return { moyenneRVB: n ? [Math.round(r / n), Math.round(g / n), Math.round(b / n)] : null, pixelsCompte: n, alphaMin: comps === 4 ? amin : 'sans alpha', alphaMax: comps === 4 ? amax : 'sans alpha' };
 }
 
 // P5
@@ -84,15 +70,17 @@ document.getElementById('p5').addEventListener('click', () => run('P5 document',
     id: d.id,
     width: d.width, widthType: typeof d.width,
     height: d.height,
+    resolution: d.resolution,
     mode: String(d.mode), modeType: typeof d.mode,
     bitsPerChannel: String(d.bitsPerChannel), bitsType: typeof d.bitsPerChannel,
+    profil: String(d.colorProfileName),
     constantsDocumentMode: constants.DocumentMode ? Object.keys(constants.DocumentMode) : 'absent',
     constantsBits: constants.BitsPerChannelType ? Object.keys(constants.BitsPerChannelType) : 'absent',
     calques: d.layers.length,
   });
 }));
 
-// P6
+// P6 : environnement (sans toucher au presse-papiers, qui exige une permission de manifest)
 document.getElementById('p6').addEventListener('click', () => run('P6 environnement', async () => {
   let req = 'echec';
   try { req = require('./helper.js').answer; } catch (e) { req = 'ECHEC ' + e.message; }
@@ -105,77 +93,121 @@ document.getElementById('p6').addEventListener('click', () => run('P6 environnem
     Buffer: typeof Buffer,
     TextDecoder: typeof TextDecoder,
     Uint8Array: typeof Uint8Array,
-    clipboard: typeof navigator !== 'undefined' && navigator.clipboard ? 'present' : 'absent',
     photoshop: app.version,
   });
 }));
 
-// P1 : composite visible. A lancer deux fois, en masquant/affichant un calque entre les deux : la moyenne doit changer.
+// P1 : composite visible (a relancer apres avoir pose une signature : la moyenne doit changer)
 document.getElementById('p1').addEventListener('click', () => run('P1 composite', async () => {
-  await readPixels('composite (sans layerID)', {});
-}));
-
-// P2 : calque actif seul.
-document.getElementById('p2').addEventListener('click', () => run('P2 calque actif', async () => {
-  const d = doc();
-  const layer = d.activeLayers[0];
-  if (!layer) throw new Error('Aucun calque actif');
-  log('calque actif', { id: layer.id, name: layer.name, kind: String(layer.kind), bounds: layer.bounds });
-  await readPixels('calque seul (layerID ' + layer.id + ')', { layerID: layer.id });
-}));
-
-// P3 / P4 : poser la signature (objet dynamique integre), la mettre a la bonne taille et position.
-async function placeProbe(withHistoryGroup) {
   const d = doc();
   const b = targetBox(d);
-  const statesBefore = d.historyStates ? d.historyStates.length : 'inconnu';
+  await core.executeAsModal(async () => {
+    const res = await imaging.getPixels({
+      documentID: d.id,
+      sourceBounds: { left: b.left, top: b.top, right: b.right, bottom: b.bottom },
+      colorSpace: 'RGB', componentSize: 8, colorProfile: 'sRGB IEC61966-2.1',
+    });
+    const img = res.imageData;
+    const data = await img.getData({ chunky: true });
+    log('composite', { zone: b, calques: d.layers.length, components: img.components, hasAlpha: img.hasAlpha }, averageRgb(img, data, false));
+    img.dispose();
+  }, { commandName: 'Essai lecture composite' });
+}));
+
+// P7 : le plan complet : poser la signature, positionnee d'apres ses bornes VISIBLES, en un seul etat d'historique (suspendHistory)
+document.getElementById('p7').addEventListener('click', () => run('P7 pose complete + historique', async () => {
+  const d = doc();
+  const b = targetBox(d);
+  const s = b.width / 820;
+  const exp = {
+    left: Math.round(b.left + CONTENT.left * s), top: Math.round(b.top + CONTENT.top * s),
+    width: Math.round(CONTENT.width * s), height: Math.round(CONTENT.height * s),
+  };
+  exp.right = exp.left + exp.width; exp.bottom = exp.top + exp.height;
 
   const pluginFolder = await storage.localFileSystem.getPluginFolder();
   const assets = await pluginFolder.getEntry('assets');
   const file = await assets.getEntry('Signature_Blanc.png');
   const token = storage.localFileSystem.createSessionToken(file);
 
-  const options = withHistoryGroup
-    ? { commandName: 'Signer', historyStateInfo: { name: 'Signer', target: d } }
-    : { commandName: 'Signer (essai sans groupe)' };
+  const before = d.historyStates.length;
+  await core.executeAsModal(async (ctx) => {
+    let suspension = null;
+    try {
+      suspension = await ctx.hostControl.suspendHistory({ documentID: d.id, name: 'Signer' });
+      log('suspendHistory ok', suspension);
+    } catch (e) {
+      log('suspendHistory ECHEC', String(e && e.message));
+    }
+    try {
+      await action.batchPlay([{ _obj: 'placeEvent', null: { _path: token, _kind: 'local' }, linked: false, _options: { dialogOptions: 'dontDisplay' } }], {});
+      const layer = d.activeLayers[0];
+      const b1 = layer.bounds;
+      log('apres placeEvent', { id: layer.id, kind: String(layer.kind), visible: { l: b1.left, t: b1.top, w: b1.right - b1.left, h: b1.bottom - b1.top } });
 
+      const pct = (exp.width / (b1.right - b1.left)) * 100;
+      await layer.scale(pct, pct, constants.AnchorPosition.TOPLEFT);
+      const b2 = layer.bounds;
+      await layer.translate(exp.left - b2.left, exp.top - b2.top);
+      layer.opacity = 100;
+      layer.name = 'Signature LM';
+      const b3 = layer.bounds;
+      log('resultat', {
+        layerId: layer.id,
+        obtenu: { left: b3.left, top: b3.top, right: b3.right, bottom: b3.bottom },
+        attendu: { left: exp.left, top: exp.top, right: exp.right, bottom: exp.bottom },
+        ecart: { left: b3.left - exp.left, top: b3.top - exp.top, right: b3.right - exp.right, bottom: b3.bottom - exp.bottom },
+        boiteComplete: b,
+      });
+    } finally {
+      if (suspension !== null) { await ctx.hostControl.resumeHistory(suspension); log('resumeHistory ok'); }
+    }
+  }, { commandName: 'Signer' });
+  const after = d.historyStates.length;
+  log('etats d\'historique', { avant: before, apres: after, ajoutes: after - before, attendu: 1 });
+}));
+
+// P8 : lire les pixels du calque actif (la signature, un objet dynamique) : couleur reconnaissable ?
+document.getElementById('p8').addEventListener('click', () => run('P8 pixels du calque actif', async () => {
+  const d = doc();
+  const layer = d.activeLayers[0];
+  if (!layer) throw new Error('Aucun calque actif');
+  const bnd = layer.bounds;
+  log('calque', { id: layer.id, name: layer.name, kind: String(layer.kind), bounds: { l: bnd.left, t: bnd.top, r: bnd.right, b: bnd.bottom } });
   await core.executeAsModal(async () => {
-    await action.batchPlay([{
-      _obj: 'placeEvent',
-      null: { _path: token, _kind: 'local' },
-      linked: false,
-      _options: { dialogOptions: 'dontDisplay' },
-    }], {});
-    const layer = d.activeLayers[0];
-    log('apres placeEvent', { name: layer.name, kind: String(layer.kind), bounds: layer.bounds });
-
-    const wNow = layer.bounds.right - layer.bounds.left;
-    const pct = (b.width / wNow) * 100;
-    await layer.scale(pct, pct, constants.AnchorPosition.TOPLEFT);
-    const b2 = layer.bounds;
-    log('apres scale', { pct, bounds: b2, largeurObtenue: b2.right - b2.left, largeurAttendue: b.width });
-
-    await layer.translate(b.left - b2.left, b.top - b2.top);
-    layer.opacity = 100;
-    layer.name = 'Signature LM';
-    const b3 = layer.bounds;
-    log('apres translate', {
-      bounds: b3,
-      attendu: { left: b.left, top: b.top, right: b.right, bottom: b.bottom },
-      ecart: { left: b3.left - b.left, top: b3.top - b.top, right: b3.right - b.right, bottom: b3.bottom - b.bottom },
-      opacite: layer.opacity, nom: layer.name,
-      ratioLargeur: ((b3.right - b3.left) / b.width).toFixed(3),
+    const res = await imaging.getPixels({
+      documentID: d.id, layerID: layer.id,
+      sourceBounds: { left: bnd.left, top: bnd.top, right: bnd.right, bottom: bnd.bottom },
+      colorSpace: 'RGB', componentSize: 8,
     });
-  }, options);
+    const img = res.imageData;
+    const data = await img.getData({ chunky: true });
+    log('pixels du calque', { components: img.components, hasAlpha: img.hasAlpha, width: img.width, height: img.height }, averageRgb(img, data, true));
+    img.dispose();
+  }, { commandName: 'Essai lecture calque' });
+}));
 
-  const statesAfter = d.historyStates ? d.historyStates.length : 'inconnu';
-  log('etats d\'historique', { avant: statesBefore, apres: statesAfter, ajoutes: (typeof statesBefore === 'number' && typeof statesAfter === 'number') ? statesAfter - statesBefore : 'inconnu' });
-}
+// P9 : lister les calques (groupes compris), puis supprimer ceux nommes "Signature LM" (nettoyage des essais)
+document.getElementById('p9').addEventListener('click', () => run('P9 lister et nettoyer', async () => {
+  const d = doc();
+  const all = [];
+  (function walk(layers, depth) {
+    for (const l of layers) {
+      all.push({ id: l.id, name: l.name, kind: String(l.kind), depth });
+      if (l.layers && l.layers.length) walk(l.layers, depth + 1);
+    }
+  })(d.layers, 0);
+  log('calques', all);
+  const targets = all.filter(x => x.name === 'Signature LM');
+  let removed = 0;
+  await core.executeAsModal(async () => {
+    for (const t of targets) {
+      const find = (layers) => { for (const l of layers) { if (l.id === t.id) return l; if (l.layers && l.layers.length) { const f = find(l.layers); if (f) return f; } } return null; };
+      const layer = find(d.layers);
+      if (layer) { layer.delete(); removed++; }
+    }
+  }, { commandName: 'Nettoyage essai' });
+  log('supprimes', { trouves: targets.length, supprimes: removed, restants: d.layers.length });
+}));
 
-document.getElementById('p3').addEventListener('click', () => run('P3 pose sans groupe', () => placeProbe(false)));
-document.getElementById('p4').addEventListener('click', () => run('P4 pose avec groupe d\'historique', () => placeProbe(true)));
-
-document.getElementById('copy').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(journal); log('(journal copie)'); } catch (e) { log('copie impossible', e.message); }
-});
 document.getElementById('clear').addEventListener('click', () => { journal = ''; out.textContent = ''; });
