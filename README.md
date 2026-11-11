@@ -73,7 +73,7 @@ Ou double-clique sur `COMPILER_EXE.bat` → le `.exe` est généré dans `dist/`
 
 Le même choix blanc / noir, mais **directement dans Photoshop**, photo par photo, juste avant d'enregistrer (Photoshop 25 ou plus récent, Windows, documents RVB 8 ou 16 bits).
 
-**Installation** : double-cliquer sur `dist-plugin/LM-Signature-1.0.0.ccx` (à générer avec `npm run plugin:pack`). Creative Cloud l'installe et prévient que le plugin ne vient pas du Marketplace. Puis, dans Photoshop : *Fenêtre > Modules externes > LM Signature*.
+**Installation** : double-cliquer sur `dist-plugin/LM-Signature-<version>.ccx` (à générer avec `npm run plugin:pack`). Creative Cloud l'installe et prévient que le plugin ne vient pas du Marketplace. Puis, dans Photoshop : *Fenêtre > Modules externes > LM Signature*.
 
 **Utilisation**
 1. Retoucher la photo, puis cliquer sur **Signer**.
