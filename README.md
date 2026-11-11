@@ -8,8 +8,10 @@ Analyse la luminosité de chaque photo et applique automatiquement le filigrane 
 
 ## Fonctionnalités
 
-- **Analyse intelligente** — détecte automatiquement si le filigrane blanc ou noir ressortira mieux sur chaque photo
-- **Traitement par lot** — importe un dossier entier ou une sélection de fichiers
+- **Analyse intelligente** — mesure le contraste réel (ratio WCAG) de chaque filigrane sur la zone exacte où il sera posé, en tenant compte de sa forme et de son opacité, et garde le plus lisible
+- **Photos fidèles** — l'orientation EXIF est respectée (portraits) et les métadonnées (EXIF, copyright, profil colorimétrique) sont conservées
+- **Traitement par lot** — importe un dossier entier ou une sélection de fichiers, 2 photos en parallèle, avec bouton d'arrêt
+- **Réglages mémorisés** — position, taille, opacité, etc. sont retrouvés au prochain lancement
 - **Drag & drop** — glisse tes photos directement dans l'app
 - **Filigranes personnalisables** — charge tes propres PNG (mémorisés entre les sessions)
 - **Réglages fins** — position (7 options), taille, opacité, marge, format de sortie, qualité JPEG, suffixe

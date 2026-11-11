@@ -5,6 +5,8 @@ let outputDir = null;
 let wmWhitePath = null;
 let wmBlackPath = null;
 let isProcessing = false;
+let cancelRequested = false;
+const CONCURRENCY = 2; // photos traitées en parallèle
 let statDone = 0, statWhite = 0, statBlack = 0, statErrors = 0;
 
 const gallery           = document.getElementById('gallery');
@@ -27,6 +29,31 @@ const sliders = {
 Object.values(sliders).forEach(s => {
   if (s.el && s.val) s.el.addEventListener('input', () => { s.val.textContent = s.el.value + s.suffix; });
 });
+
+// ---- Réglages mémorisés entre les sessions ----
+const SETTING_IDS = ['position', 'size', 'opacity', 'margin', 'quality', 'output-format', 'suffix'];
+function loadSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('wm-settings') || '{}');
+    SETTING_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && saved[id] !== undefined) el.value = saved[id];
+    });
+    Object.values(sliders).forEach(s => { if (s.el && s.val) s.val.textContent = s.el.value + s.suffix; });
+  } catch {}
+}
+function saveSettings() {
+  try {
+    const out = {};
+    SETTING_IDS.forEach(id => { const el = document.getElementById(id); if (el) out[id] = el.value; });
+    localStorage.setItem('wm-settings', JSON.stringify(out));
+  } catch {}
+}
+SETTING_IDS.forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', saveSettings);
+});
+loadSettings();
 
 // ---- Init filigranes ----
 async function initWatermarks() {
@@ -101,7 +128,8 @@ function setupDrop(el) {
     dropArea.classList.remove('active');
     const files = Array.from(e.dataTransfer.files)
       .filter(f => f.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|tiff?)$/i.test(f.name))
-      .map(f => f.path).filter(Boolean);
+      .map(f => { try { return window.api.getPathForFile(f); } catch { return f.path; } })
+      .filter(Boolean);
     if (files.length) addPhotos(files);
   });
 }
@@ -124,20 +152,43 @@ function addPhotos(filePaths) {
   updateUI();
 }
 
+// Chemin Windows -> URL file:// (encode #, ?, %, espaces, accents...)
+function toFileUrl(p) {
+  return 'file:///' + encodeURI(p.replace(/\\/g, '/')).replace(/#/g, '%23').replace(/\?/g, '%3F');
+}
+
+// Carte construite via le DOM : un nom de fichier ne peut pas injecter de HTML
 function renderCard(photo) {
   dropArea.style.display = 'none';
   galleryContainer.style.display = 'block';
   const card = document.createElement('div');
   card.className = 'photo-card';
   card.id = 'card-' + photo.id;
-  const imgSrc = 'file:///' + photo.path.replace(/\\/g, '/');
-  card.innerHTML =
-    '<img class="photo-thumb" src="' + imgSrc + '" loading="lazy">' +
-    '<div class="photo-info"><span class="photo-name" title="' + photo.name + '">' + photo.name + '</span>' +
-    '<span class="badge pending" id="badge-' + photo.id + '">attente</span></div>' +
-    '<button class="photo-remove" data-id="' + photo.id + '">x</button>';
+
+  const img = document.createElement('img');
+  img.className = 'photo-thumb';
+  img.loading = 'lazy';
+  img.src = toFileUrl(photo.path);
+
+  const info = document.createElement('div');
+  info.className = 'photo-info';
+  const nameEl = document.createElement('span');
+  nameEl.className = 'photo-name';
+  nameEl.title = photo.name;
+  nameEl.textContent = photo.name;
+  const badge = document.createElement('span');
+  badge.className = 'badge pending';
+  badge.id = 'badge-' + photo.id;
+  badge.textContent = 'attente';
+  info.append(nameEl, badge);
+
+  const rm = document.createElement('button');
+  rm.className = 'photo-remove';
+  rm.textContent = 'x';
+  rm.addEventListener('click', () => removePhoto(photo.id));
+
+  card.append(img, info, rm);
   gallery.appendChild(card);
-  card.querySelector('.photo-remove').addEventListener('click', () => removePhoto(photo.id));
 }
 
 function removePhoto(id) {
@@ -149,24 +200,28 @@ function removePhoto(id) {
 
 function updateUI() {
   photoCount.textContent = photos.length + ' photo(s)';
-  btnClear.disabled = photos.length === 0;
+  btnClear.disabled = photos.length === 0 || isProcessing;
   updateProcessBtn();
   if (photos.length === 0) { dropArea.style.display = 'flex'; galleryContainer.style.display = 'none'; }
 }
 
 function updateProcessBtn() {
-  const wmOk = wmWhitePath && wmBlackPath;
-  btnProcess.disabled = photos.length === 0 || isProcessing || !wmOk;
-  if (!wmOk) {
-    btnProcess.title = 'Choisissez les deux filigranes avant de continuer';
-  } else {
+  // Pendant le traitement, le bouton devient "Arrêter"
+  if (isProcessing) {
+    btnProcess.disabled = cancelRequested;
+    btnProcess.textContent = cancelRequested ? 'Arrêt en cours...' : '■ Arrêter';
     btnProcess.title = '';
+    return;
   }
+  const wmOk = wmWhitePath && wmBlackPath;
+  btnProcess.textContent = '▶ Appliquer les filigranes';
+  btnProcess.disabled = photos.length === 0 || !wmOk;
+  btnProcess.title = wmOk ? '' : 'Choisissez les deux filigranes avant de continuer';
 }
 
 btnClear.addEventListener('click', () => {
   photos = []; gallery.innerHTML = ''; resetStats();
-  progressBar.style.width = '0%'; statusMsg.textContent = 'Pret'; updateUI();
+  progressBar.style.width = '0%'; statusMsg.textContent = 'Prêt'; updateUI();
 });
 
 document.getElementById('btn-remove-done').addEventListener('click', () => {
@@ -182,8 +237,9 @@ btnOpenOutput.addEventListener('click', () => {
 
 // ---- Traitement ----
 btnProcess.addEventListener('click', async () => {
-  if (isProcessing) return;
-  isProcessing = true; btnProcess.disabled = true; resetStats();
+  if (isProcessing) { cancelRequested = true; updateProcessBtn(); return; }
+  isProcessing = true; cancelRequested = false; resetStats(); progressBar.style.width = '0%';
+  btnClear.disabled = true; updateProcessBtn();
 
   const position     = document.getElementById('position').value;
   const sizePercent  = parseInt(document.getElementById('size').value);
@@ -191,12 +247,14 @@ btnProcess.addEventListener('click', async () => {
   const margin       = parseInt(document.getElementById('margin').value);
   const quality      = parseInt(document.getElementById('quality').value);
   const outputFormat = document.getElementById('output-format').value;
-  const suffix       = document.getElementById('suffix').value || '_wm';
+  // Retire les caractères interdits dans un nom de fichier Windows
+  const suffix       = (document.getElementById('suffix').value || '_wm').replace(/[<>:"/\\|?*]/g, '');
 
   const toProcess = photos.filter(p => p.status !== 'done');
-  let processed = 0;
+  let next = 0, finished = 0;
 
-  for (const photo of toProcess) {
+  async function handle(photo) {
+    document.getElementById('card-' + photo.id)?.classList.remove('error');
     setBadge(photo.id, 'processing', 'analyse...');
     const pathNorm  = photo.path.replace(/\//g, '\\');
     const lastSlash = pathNorm.lastIndexOf('\\');
@@ -208,40 +266,57 @@ btnProcess.addEventListener('click', async () => {
     const outExt    = outputFormat === 'same' ? origExt : outputFormat;
     const outPath   = outDir + '\\' + baseName + suffix + '.' + outExt;
 
-    statusMsg.textContent = 'Traitement ' + (processed + 1) + '/' + toProcess.length + ' - ' + photo.name;
+    let result;
+    try {
+      result = await window.api.processPhoto({
+        inputPath: photo.path, outputPath: outPath,
+        options: { position, sizePercent, opacity, margin, quality, wmWhitePath, wmBlackPath }
+      });
+    } catch (e) {
+      result = { success: false, error: e.message };
+    }
 
-    const result = await window.api.processPhoto({
-      inputPath: photo.path, outputPath: outPath,
-      options: { position, sizePercent, opacity, margin, quality, wmWhitePath, wmBlackPath }
-    });
-
-    processed++;
-    progressBar.style.width = Math.round((processed / toProcess.length) * 100) + '%';
+    finished++;
+    progressBar.style.width = Math.round((finished / toProcess.length) * 100) + '%';
+    statusMsg.textContent = 'Traitement ' + finished + '/' + toProcess.length;
 
     if (result.success) {
       photo.status = 'done';
       document.getElementById('card-' + photo.id)?.classList.add('done');
       setBadge(photo.id, result.usedColor === 'white' ? 'white-wm' : 'black-wm',
         result.usedColor === 'white' ? 'blanc' : 'noir');
+      const c = result.contrast;
+      const badge = document.getElementById('badge-' + photo.id);
+      if (badge && c) badge.title = 'Contraste - blanc : ' + c.white + ' / noir : ' + c.black;
       statDone++;
       if (result.usedColor === 'white') statWhite++; else statBlack++;
     } else {
       photo.status = 'error';
       document.getElementById('card-' + photo.id)?.classList.add('error');
       setBadge(photo.id, 'error-badge', 'erreur');
+      const badge = document.getElementById('badge-' + photo.id);
+      if (badge) badge.title = result.error || 'Erreur inconnue';
       statErrors++;
     }
     updateStats();
   }
 
-  statusMsg.textContent = 'Termine - ' + statDone + ' traitee(s), ' + statErrors + ' erreur(s)';
-  isProcessing = false; updateProcessBtn();
+  async function worker() {
+    while (!cancelRequested && next < toProcess.length) await handle(toProcess[next++]);
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, toProcess.length) }, worker));
+
+  const skipped = toProcess.length - next;
+  statusMsg.textContent = (cancelRequested ? 'Arrêté - ' : 'Terminé - ') + statDone + ' traitée(s), ' + statErrors + ' erreur(s)' +
+    (skipped > 0 ? ', ' + skipped + ' non traitée(s)' : '');
+  isProcessing = false; cancelRequested = false;
+  updateUI();
   if (statDone > 0) btnOpenOutput.disabled = false;
 });
 
 function setBadge(id, cls, text) {
   const b = document.getElementById('badge-' + id);
-  if (b) { b.className = 'badge ' + cls; b.textContent = text; }
+  if (b) { b.className = 'badge ' + cls; b.textContent = text; b.title = ''; }
 }
 function resetStats() { statDone = 0; statWhite = 0; statBlack = 0; statErrors = 0; updateStats(); }
 function updateStats() {
