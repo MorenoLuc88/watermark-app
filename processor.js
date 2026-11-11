@@ -141,7 +141,9 @@ function applyOutputFormat(pipeline, ext, quality) {
       return pipeline.webp({ quality });
     case 'tif':
     case 'tiff':
-      return pipeline.tiff({ quality, compression: 'lzw' });
+      // LZW est sans perte : le réglage de qualité n'y a pas d'effet.
+      // Sharp ne sait pas écrire l'EXIF en TIFF (le profil ICC est conservé).
+      return pipeline.tiff({ compression: 'lzw' });
     default:
       return pipeline;
   }
