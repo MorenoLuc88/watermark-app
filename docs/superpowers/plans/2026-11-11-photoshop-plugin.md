@@ -61,7 +61,7 @@ photoshop-plugin/
 
 ---
 
-### Tâche 1 : Squelette, signatures, lancement des tests
+### Task 1: Squelette, signatures, lancement des tests
 
 **Fichiers :**
 - Créer : `photoshop-plugin/manifest.json`, `photoshop-plugin/assets/Signature_Blanc.png`, `photoshop-plugin/assets/Signature_noir.png`, `photoshop-plugin/tests/smoke.test.js`
@@ -78,7 +78,7 @@ photoshop-plugin/
 
 ---
 
-### Tâche 2 : Essai dans Photoshop (jetable, ne sera pas conservé)
+### Task 2: Essai dans Photoshop (jetable, ne sera pas conservé)
 
 Cette tâche **demande à Luc de lancer le plugin d'essai dans Photoshop** et de relever les résultats. Elle lève les risques de la spec avant d'écrire le reste.
 
@@ -99,7 +99,7 @@ Cette tâche **demande à Luc de lancer le plugin d'essai dans Photoshop** et de
 
 ---
 
-### Tâche 3 : Profil des signatures (masque alpha et luminances)
+### Task 3: Profil des signatures (masque alpha et luminances)
 
 Photoshop ne peut pas décoder un PNG en JavaScript pur sans `sharp` : un outil de développement précalcule ce qu'il faut.
 
@@ -122,7 +122,7 @@ Photoshop ne peut pas décoder un PNG en JavaScript pur sans `sharp` : un outil 
 
 ---
 
-### Tâche 4 : Calcul de la boîte de la signature
+### Task 4: Calcul de la boîte de la signature
 
 **Fichiers :** Créer `photoshop-plugin/src/placement.js` ; Test `photoshop-plugin/tests/placement.test.js`
 
@@ -142,7 +142,7 @@ Photoshop ne peut pas décoder un PNG en JavaScript pur sans `sharp` : un outil 
 
 ---
 
-### Tâche 5 : Choix de la couleur (contraste)
+### Task 5: Choix de la couleur (contraste)
 
 **Fichiers :** Créer `photoshop-plugin/src/contrast.js` ; Test `photoshop-plugin/tests/contrast.test.js`
 
@@ -163,7 +163,7 @@ Photoshop ne peut pas décoder un PNG en JavaScript pur sans `sharp` : un outil 
 
 ---
 
-### Tâche 6 : Réglages
+### Task 6: Réglages
 
 **Fichiers :** Créer `photoshop-plugin/src/settings.js` ; Test `photoshop-plugin/tests/settings.test.js`
 
@@ -177,7 +177,7 @@ Photoshop ne peut pas décoder un PNG en JavaScript pur sans `sharp` : un outil 
 
 ---
 
-### Tâche 7 : Enchaînement « Signer » / « Inverser » et couche Photoshop
+### Task 7: Enchaînement « Signer » / « Inverser » et couche Photoshop
 
 **Prérequis :** résultats de la Tâche 2 (noms exacts des constantes de mode, unités, bornes). Mettre à jour cette tâche avec eux avant de commencer.
 
@@ -215,7 +215,7 @@ Photoshop ne peut pas décoder un PNG en JavaScript pur sans `sharp` : un outil 
 
 ---
 
-### Tâche 8 : Panneau
+### Task 8: Panneau
 
 **Fichiers :** Créer `photoshop-plugin/index.html`, `photoshop-plugin/src/panel.js`, `photoshop-plugin/src/messages.js` ; Test `photoshop-plugin/tests/messages.test.js`
 
@@ -231,7 +231,7 @@ Photoshop ne peut pas décoder un PNG en JavaScript pur sans `sharp` : un outil 
 
 ---
 
-### Tâche 9 : Validation dans Photoshop, paquet, documentation, PR
+### Task 9: Validation dans Photoshop, paquet, documentation, PR
 
 Cette tâche **demande à Luc** de charger le plugin et de confirmer chaque ligne. Elle ne se termine que quand toutes sont cochées.
 
