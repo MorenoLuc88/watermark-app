@@ -7,7 +7,9 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder --win --x64",
-    "test:plugin": "node --test \"photoshop-plugin/tests/*.test.js\""
+    "test:plugin": "node --test \"photoshop-plugin/tests/*.test.js\"",
+    "plugin:pack": "node photoshop-plugin/tools/pack.js",
+    "plugin:pack:spike": "node photoshop-plugin/tools/pack.js spike"
   },
   "build": {
     "appId": "com.lucmoreno.watermark",
