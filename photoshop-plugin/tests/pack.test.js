@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const zlib = require('node:zlib');
 const path = require('node:path');
+const fs = require('node:fs');
+const os = require('node:os');
 const { buildZip, listPackageFiles } = require('../tools/pack.js');
 
 // Relit une archive ZIP : renvoie [{ name, data }] en décompressant chaque entrée depuis le répertoire central.
@@ -36,17 +38,27 @@ test('buildZip produit une archive relisible, noms en / et accents conservés', 
   files.forEach((f, i) => assert.ok(back[i].data.equals(f.data), f.name));
 });
 
-test('listPackageFiles du plugin exclut tests, outils et essai, et garde manifest, sources et signatures', () => {
+test('listPackageFiles du plugin exclut tests et outils, et garde manifest, page, panneau, sources et signatures', () => {
   const root = path.join(__dirname, '..');
-  const names = listPackageFiles(root, ['tests', 'tools', 'spike']).map(f => f.name);
-  assert.ok(names.includes('manifest.json'));
-  assert.ok(names.includes('assets/Signature_Blanc.png'));
-  assert.ok(names.includes('src/sign.js'));
-  assert.ok(!names.some(n => /^(tests|tools|spike)\//.test(n)), names.filter(n => /^(tests|tools|spike)\//.test(n)).join(','));
+  const names = listPackageFiles(root, ['tests', 'tools']).map(f => f.name);
+  for (const expected of ['manifest.json', 'index.html', 'panel.js', 'assets/Signature_Blanc.png', 'assets/signature-profile.js', 'src/sign.js', 'icons/plugin@1x.png']) {
+    assert.ok(names.includes(expected), expected + ' absent du paquet');
+  }
+  assert.ok(!names.some(n => /^(tests|tools)\//.test(n)), names.filter(n => /^(tests|tools)\//.test(n)).join(','));
   assert.ok(!names.some(n => n.includes('\\')), 'chemins en /');
 });
 
-test('listPackageFiles de l\'essai ne contient que le dossier spike', () => {
-  const names = listPackageFiles(path.join(__dirname, '..', 'spike')).map(f => f.name);
-  assert.ok(names.includes('manifest.json') && names.includes('probe.js') && names.includes('icons/plugin@1x.png'));
+test('listPackageFiles n\'exclut que les dossiers de premier niveau demandés', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lm-pack-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'tests'));
+    fs.mkdirSync(path.join(dir, 'src', 'tests'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'tests', 'a.js'), 'x');
+    fs.writeFileSync(path.join(dir, 'src', 'tests', 'b.js'), 'y');
+    fs.writeFileSync(path.join(dir, 'c.js'), 'z');
+    const names = listPackageFiles(dir, ['tests']).map(f => f.name).sort();
+    assert.deepStrictEqual(names, ['c.js', 'src/tests/b.js']);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

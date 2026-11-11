@@ -1,6 +1,5 @@
 // Fabrique le paquet .ccx (archive ZIP) du plugin, installable d'un double-clic via Creative Cloud.
-//   node photoshop-plugin/tools/pack.js          → dist-plugin/LM-Signature-<version>.ccx
-//   node photoshop-plugin/tools/pack.js spike    → dist-plugin/LM-Signature-Essai-<version>.ccx (essai jetable)
+//   node photoshop-plugin/tools/pack.js   → dist-plugin/LM-Signature-<version>.ccx
 // Même méthode que le plugin Backdrop Clean (ZIP écrit à la main, sans dépendance). Nécessite Node 22+ (zlib.crc32).
 const fs = require('node:fs');
 const path = require('node:path');
@@ -69,18 +68,16 @@ function buildZip(files) {
   return Buffer.concat([...chunks, cenBuf, end]);
 }
 
-function pack(target) {
-  const isSpike = target === 'spike';
-  const root = isSpike ? path.join(PLUGIN_ROOT, 'spike') : PLUGIN_ROOT;
-  const files = listPackageFiles(root, isSpike ? [] : ['tests', 'tools', 'spike']);
-  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
+function pack() {
+  const files = listPackageFiles(PLUGIN_ROOT, ['tests', 'tools']);
+  const manifest = JSON.parse(fs.readFileSync(path.join(PLUGIN_ROOT, 'manifest.json'), 'utf8'));
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const dest = path.join(OUT_DIR, `LM-Signature${isSpike ? '-Essai' : ''}-${manifest.version}.ccx`);
+  const dest = path.join(OUT_DIR, `LM-Signature-${manifest.version}.ccx`);
   fs.writeFileSync(dest, buildZip(files));
   console.log(`Paquet créé : ${dest} (${files.length} fichiers)`);
   return dest;
 }
 
-if (require.main === module) pack(process.argv[2]);
+if (require.main === module) pack();
 
 module.exports = { buildZip, listPackageFiles, pack };
