@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   selectPhotos:       () => ipcRenderer.invoke('select-photos'),
@@ -10,4 +10,6 @@ contextBridge.exposeInMainWorld('api', {
   getAssetsPath:      () => ipcRenderer.invoke('get-assets-path'),
   getWatermarkPaths:  () => ipcRenderer.invoke('get-watermark-paths'),
   selectWatermark:    (color) => ipcRenderer.invoke('select-watermark', color),
+  // File.path n'existe plus à partir d'Electron 32 : webUtils est la méthode officielle
+  getPathForFile:     (file) => webUtils.getPathForFile(file),
 });
