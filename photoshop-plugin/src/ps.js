@@ -131,14 +131,22 @@ function createPs({ photoshop, uxp }) {
         const assets = await (await storage.localFileSystem.getPluginFolder()).getEntry('assets');
         const file = await assets.getEntry(SIGNATURE_FILES[color]);
         const token = storage.localFileSystem.createSessionToken(file);
-        await action.batchPlay([{
+        // Photoshop insère le nouveau calque juste au-dessus du calque SÉLECTIONNÉ : on sélectionne d'abord le calque
+        // du haut, sinon des calques visibles situés au-dessus pourraient masquer la signature.
+        const live = liveDocument(doc);
+        let top = null;
+        for (const l of live.layers) { top = l; break; }
+        const commands = [];
+        if (top) commands.push({ _obj: 'select', _target: [{ _ref: 'layer', _id: top.id }], makeVisible: false });
+        commands.push({
           _obj: 'placeEvent',
           null: { _path: token, _kind: 'local' },
           linked: false,
           _options: { dialogOptions: 'dontDisplay' },
-        }], {});
+        });
+        await action.batchPlay(commands, {});
 
-        const layer = liveDocument(doc).activeLayers[0];
+        const layer = live.activeLayers[0];
         const placed = layer.bounds;
         const pct = (visible.width / (placed.right - placed.left)) * 100;
         await layer.scale(pct, pct, constants.AnchorPosition.TOPLEFT);

@@ -48,12 +48,25 @@ function makeHost({ doc, pixels } = {}) {
         },
       },
       action: {
+        // Fidèle à Photoshop : « select » change le calque actif ; « placeEvent » insère le nouveau calque
+        // AU-DESSUS du calque sélectionné (pas forcément en haut de la pile).
         async batchPlay(cmds) {
-          calls.push('batchPlay:' + cmds[0]._obj + ':' + cmds[0].null._path + ':linked=' + cmds[0].linked);
-          // Photoshop pose un objet dynamique au centre, sur sa zone visible (2000 x 586 dans l'essai)
-          const placed = makeLayer({ id: 9, name: 'Signature_Blanc', kind: 'smartObject', bounds: { left: 804, top: 2443, right: 2804, bottom: 3029 } });
-          doc.layers.unshift(placed);
-          doc.activeLayers = [placed];
+          for (const cmd of cmds) {
+            if (cmd._obj === 'select') {
+              const id = cmd._target[0]._id;
+              calls.push('batchPlay:select:' + id);
+              const target = doc.layers.find(l => l.id === id);
+              if (target) doc.activeLayers = [target];
+            } else if (cmd._obj === 'placeEvent') {
+              calls.push('batchPlay:' + cmd._obj + ':' + cmd.null._path + ':linked=' + cmd.linked);
+              // Photoshop pose un objet dynamique au centre, sur sa zone visible (2000 x 586 dans l'essai)
+              const placed = makeLayer({ id: 9, name: 'Signature_Blanc', kind: 'smartObject', bounds: { left: 804, top: 2443, right: 2804, bottom: 3029 } });
+              const selected = doc.activeLayers && doc.activeLayers[0];
+              const at = selected ? Math.max(0, doc.layers.indexOf(selected)) : 0;
+              doc.layers.splice(at, 0, placed);
+              doc.activeLayers = [placed];
+            }
+          }
         },
       },
       imaging: {
@@ -278,4 +291,14 @@ test("detectLayerColor garde les bornes du calque s'il est entièrement hors du 
   const host = makeHost({ doc, pixels: { components: 4, width: 1, height: 1, data: Uint8Array.from([0, 0, 0, 255]) } });
   assert.strictEqual(await createPs(host).detectLayerColor(doc, 9), 'black');
   assert.deepStrictEqual(host.getPixelsArgs[0].sourceBounds, { left: 4000, top: 100, right: 4800, bottom: 335 });
+});
+
+test("placeSignature place la signature tout en haut même si un calque du bas est sélectionné", async () => {
+  const group = makeLayer({ id: 7, name: 'Frequency Separation', kind: 'group' });
+  const background = makeLayer({ id: 1, name: 'Arrière-plan' });
+  const doc = makeDoc({ layers: [group, background], activeLayers: [background] }); // le calque du bas est sélectionné
+  const host = makeHost({ doc });
+  await createPs(host).placeSignature(doc, { color: 'white', visible: { left: 10, top: 10, width: 400, height: 100 }, opacity: 100 });
+  assert.strictEqual(doc.layers[0].name, 'Signature LM', 'au-dessus de tous les calques : ' + doc.layers.map(l => l.name).join(' / '));
+  assert.ok(host.calls.indexOf('batchPlay:select:7') < host.calls.findIndex(c => c.startsWith('batchPlay:placeEvent')), 'sélection du calque du haut avant la pose');
 });
