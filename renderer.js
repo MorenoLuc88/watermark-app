@@ -257,7 +257,9 @@ btnProcess.addEventListener('click', async () => {
   // différents, un seul dossier de sortie) ne doivent jamais écrire le même fichier,
   // surtout avec le traitement en parallèle. Windows ignore la casse, la comparaison aussi.
   const outPaths = new Map();
-  const usedOut = new Set();
+  // Les photos importées sont aussi réservées : une sortie ne doit jamais tomber sur la
+  // source d'une autre photo du lot (ex. photo.jpg et photo_wm.jpg dans le même dossier).
+  const usedOut = new Set(photos.map(p => p.path.replace(/\//g, '\\').toLowerCase()));
   for (const photo of toProcess) {
     const pathNorm  = photo.path.replace(/\//g, '\\');
     const lastSlash = pathNorm.lastIndexOf('\\');
