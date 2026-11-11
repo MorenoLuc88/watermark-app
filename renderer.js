@@ -152,9 +152,12 @@ function addPhotos(filePaths) {
   updateUI();
 }
 
-// Chemin Windows -> URL file:// (encode #, ?, %, espaces, accents...)
+// Chemin Windows -> URL file:// : chaque segment est encodé (#, ?, %, espaces, accents...),
+// sauf la lettre de lecteur ("C:") qui doit rester telle quelle.
 function toFileUrl(p) {
-  return 'file:///' + encodeURI(p.replace(/\\/g, '/')).replace(/#/g, '%23').replace(/\?/g, '%3F');
+  return 'file:///' + p.replace(/\\/g, '/').split('/')
+    .map((seg, i) => (i === 0 && /^[A-Za-z]:$/.test(seg)) ? seg : encodeURIComponent(seg))
+    .join('/');
 }
 
 // Carte construite via le DOM : un nom de fichier ne peut pas injecter de HTML
