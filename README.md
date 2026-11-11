@@ -69,6 +69,26 @@ Ou double-clique sur `COMPILER_EXE.bat` → le `.exe` est généré dans `dist/`
 
 ---
 
+## Plugin Photoshop — LM Signature
+
+Le même choix blanc / noir, mais **directement dans Photoshop**, photo par photo, juste avant d'enregistrer (Photoshop 25 ou plus récent, Windows, documents RVB 8 ou 16 bits).
+
+**Installation** : double-cliquer sur `dist-plugin/LM-Signature-<version>.ccx` (à générer avec `npm run plugin:pack`). Creative Cloud l'installe et prévient que le plugin ne vient pas du Marketplace. Puis, dans Photoshop : *Fenêtre > Modules externes > LM Signature*.
+
+**Utilisation**
+1. Retoucher la photo, puis cliquer sur **Signer**.
+2. Le plugin lit l'image telle qu'elle est vue (tous calques visibles), mesure la zone sous la signature, choisit la signature blanche ou noire la plus lisible et la pose sur un nouveau calque **« Signature LM »** (objet dynamique, opacité réglée sur le calque).
+3. **Inverser blanc / noir** change la couleur en gardant la position que tu as donnée au calque. Un second clic sur *Signer* remplace la signature au lieu d'en empiler une autre.
+4. Tout tient en une seule étape d'historique (Ctrl+Z). Enregistrer ensuite en JPEG comme d'habitude.
+
+**Réglages** (mémorisés) : position (7 choix, bas droite par défaut), taille (30 % du plus petit côté par défaut, appliquée au PNG entier, marges transparentes comprises), opacité (100 %), marge (30 px).
+
+**Limites connues** : les signatures font 820 px de large, elles sont donc agrandies d'environ 30 % sur de grandes photos ; les modes CMYK, niveaux de gris et 32 bits affichent un message au lieu de signer.
+
+**Développement** : le code est dans `photoshop-plugin/`. `npm run test:plugin` lance les tests (sans Photoshop). Le choix de couleur est un portage de `processor.js`, avec un test de parité contre lui. Après modification des PNG, régénérer `assets/signature-profile.js` avec `node photoshop-plugin/tools/build-signature-profile.js`. Les mesures faites dans Photoshop sont dans `docs/superpowers/specs/2026-11-11-photoshop-plugin-spike-findings.md`.
+
+---
+
 ## Stack
 
 - [Electron](https://www.electronjs.org/) — framework desktop

@@ -6,7 +6,9 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win --x64"
+    "build": "electron-builder --win --x64",
+    "test:plugin": "node --test \"photoshop-plugin/tests/*.test.js\"",
+    "plugin:pack": "node photoshop-plugin/tools/pack.js"
   },
   "build": {
     "appId": "com.lucmoreno.watermark",
@@ -28,7 +30,11 @@
     "files": [
       "**/*",
       "!node_modules/electron-builder/**",
-      "!*.md"
+      "!*.md",
+      "!photoshop-plugin/**",
+      "!docs/**",
+      "!dist-plugin/**",
+      "!.superpowers/**"
     ]
   },
   "dependencies": {

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      color: var(--uxp-host-text-color);
+      font-size: var(--uxp-host-font-size);
+      padding: 10px 12px;
+    }
+    button { width: 100%; margin: 0 0 6px 0; }
+    .row { display: flex; flex-direction: row; align-items: center; }
+    .row > * { flex: 1; }
+    #invert { margin-bottom: 0; }
+    #status { margin: 8px 0 12px; min-height: 32px; opacity: 0.9; }
+    #status.error { color: #e34850; }
+    label { display: block; margin-top: 10px; }
+    .value { display: inline-block; min-width: 44px; text-align: right; opacity: 0.8; }
+    select, input[type="range"] { width: 100%; }
+    h4 { margin: 14px 0 0 0; font-weight: normal; opacity: 0.7; }
+  </style>
+</head>
+<body>
+  <button id="sign" class="primary">Signer</button>
+  <button id="invert">Inverser blanc / noir</button>
+  <div id="status">Ouvre une photo, puis clique sur « Signer ».</div>
+
+  <h4>Réglages</h4>
+
+  <label for="position">Position</label>
+  <select id="position">
+    <option value="bottom-right">Bas droite</option>
+    <option value="bottom-left">Bas gauche</option>
+    <option value="bottom-center">Bas centre</option>
+    <option value="top-right">Haut droite</option>
+    <option value="top-left">Haut gauche</option>
+    <option value="top-center">Haut centre</option>
+    <option value="center">Centre</option>
+  </select>
+
+  <label for="size">Taille <span class="value" id="size-val">30%</span></label>
+  <input type="range" id="size" min="3" max="50" step="1" value="30">
+
+  <label for="opacity">Opacité <span class="value" id="opacity-val">100%</span></label>
+  <input type="range" id="opacity" min="10" max="100" step="1" value="100">
+
+  <label for="margin">Marge <span class="value" id="margin-val">30 px</span></label>
+  <input type="range" id="margin" min="0" max="150" step="1" value="30">
+
+  <script src="panel.js"></script>
+</body>
+</html>
