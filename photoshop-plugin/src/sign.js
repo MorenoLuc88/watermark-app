@@ -1,6 +1,6 @@
 // Enchaînement « Signer » / « Inverser ». Ne parle jamais directement à Photoshop :
 // toutes les actions passent par l'objet `ps` injecté (voir ps.js), ce qui permet de tout tester avec un faux.
-const { computeBox } = require('./placement.js');
+const { computeBox, visibleRect } = require('./placement.js');
 const { chooseColor } = require('./contrast.js');
 const { normalizeSettings } = require('./settings.js');
 
@@ -16,6 +16,7 @@ class SignError extends Error {
 
 const SUPPORTED_MODE = 'RGB';
 const SUPPORTED_DEPTHS = [8, 16];
+const MAX_EXISTING = 50;
 
 // Les exceptions inattendues de Photoshop deviennent des SignError("PS_ERROR") avec la cause d'origine.
 async function guarded(fn) {
@@ -42,9 +43,13 @@ function createSigner({ ps, profile, getSettings }) {
       const doc = await requireDocument();
       const settings = normalizeSettings(getSettings());
       return ps.runAsSingleHistoryState(doc, 'Signer', async () => {
-        // La signature existante est retirée avant la mesure : elle ne doit pas fausser l'analyse.
-        const existing = await ps.findSignatureLayer(doc);
-        if (existing) await ps.removeLayer(doc, existing.id);
+        // Toute signature existante est retirée avant la mesure : elle ne doit pas fausser l'analyse
+        // (et il ne doit en rester qu'une). Garde-fou : jamais plus de MAX_EXISTING suppressions.
+        for (let i = 0; i < MAX_EXISTING; i++) {
+          const existing = await ps.findSignatureLayer(doc);
+          if (!existing) break;
+          await ps.removeLayer(doc, existing.id);
+        }
 
         const box = computeBox({
           position: settings.position,
@@ -57,7 +62,8 @@ function createSigner({ ps, profile, getSettings }) {
         });
         const region = await ps.readCompositeRegion(doc, box);
         const { color, scores } = chooseColor({ ...region, profile, opacity: settings.opacity });
-        await ps.placeSignature(doc, { color, box, opacity: settings.opacity });
+        // Photoshop mesure un calque sur sa zone visible : c'est elle qu'on vise
+        await ps.placeSignature(doc, { color, visible: visibleRect(box, profile), opacity: settings.opacity });
         return { color, box, scores };
       });
     });
@@ -73,7 +79,7 @@ function createSigner({ ps, profile, getSettings }) {
         const color = current === 'white' ? 'black' : 'white';
         await ps.removeLayer(doc, existing.id);
         // Même position et même opacité que le calque actuel (Luc a pu le déplacer)
-        await ps.placeSignature(doc, { color, box: existing.bounds, opacity: existing.opacity });
+        await ps.placeSignature(doc, { color, visible: existing.bounds, opacity: existing.opacity });
         return { color, box: existing.bounds };
       });
     });

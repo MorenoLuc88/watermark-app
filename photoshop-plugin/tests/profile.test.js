@@ -28,9 +28,14 @@ test('le masque décrit un tracé fin : ni vide, ni plein, marge gauche transpar
   }
 });
 
+test("le profil donne la zone visible du PNG (alpha > 0), mesurée par l'essai Photoshop", () => {
+  assert.deepStrictEqual(loadProfile().content, { left: 104, top: 64, width: 600, height: 176 });
+});
+
 test('decodeProfile décode le base64 sans API Node et rejette un masque de mauvaise taille', () => {
-  const raw = { width: 4, height: 4, maskWidth: 2, maskHeight: 2, alphaBase64: 'AP8A/w==', luminance: { white: 1, black: 0 } };
+  const raw = { width: 4, height: 4, maskWidth: 2, maskHeight: 2, alphaBase64: 'AP8A/w==', luminance: { white: 1, black: 0 }, content: { left: 1, top: 1, width: 2, height: 2 } };
   const p = decodeProfile(raw);
   assert.deepStrictEqual(Array.from(p.mask.alpha), [0, 255, 0, 255]);
   assert.throws(() => decodeProfile({ ...raw, maskWidth: 3 }), /masque/);
+  assert.throws(() => decodeProfile({ ...raw, content: undefined }), /zone visible/);
 });

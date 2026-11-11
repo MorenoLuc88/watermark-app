@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createSigner, SignError } = require('../src/sign.js');
-const { computeBox } = require('../src/placement.js');
+const { computeBox, visibleRect } = require('../src/placement.js');
 const { loadProfile } = require('../src/profile.js');
 const { DEFAULT_SETTINGS } = require('../src/settings.js');
 
@@ -11,7 +11,7 @@ const DOC = { id: 1, width: 2000, height: 1000, mode: 'RGB', bitsPerChannel: 8 }
 // Faux Photoshop : enregistre l'ordre des appels. gray = niveau de gris du fond renvoyé à la lecture.
 function makeFakePs({ doc = DOC, gray = 20, existing = null, existingColor = 'white', failOn = null } = {}) {
   const calls = [];
-  let layer = existing;
+  let layers = existing ? (Array.isArray(existing) ? [...existing] : [existing]) : [];
   const ps = {
     calls,
     placed: [],
@@ -21,8 +21,8 @@ function makeFakePs({ doc = DOC, gray = 20, existing = null, existingColor = 'wh
       if (failOn === 'readCompositeRegion') throw new Error('boom');
       return { pixels: new Uint8Array(box.width * box.height * 3).fill(gray), channels: 3, width: box.width, height: box.height };
     },
-    async findSignatureLayer() { calls.push('findSignatureLayer'); return layer; },
-    async removeLayer(d, id) { calls.push('removeLayer:' + id); layer = null; },
+    async findSignatureLayer() { calls.push('findSignatureLayer'); return layers[0] || null; },
+    async removeLayer(d, id) { calls.push('removeLayer:' + id); layers = layers.filter(l => l.id !== id); },
     async detectLayerColor() { calls.push('detectLayerColor'); return existingColor; },
     async placeSignature(d, args) { calls.push('placeSignature'); ps.placed.push(args); },
     async runAsSingleHistoryState(d, name, fn) { calls.push('history:' + name); return fn(); },
@@ -60,7 +60,17 @@ test('sign accepte RGB 8 bits et RGB 16 bits', async () => {
 test('sign supprime la signature existante avant de lire les pixels, et n\'en laisse qu\'une', async () => {
   const ps = makeFakePs({ existing: { id: 7, bounds: { left: 1, top: 1, width: 10, height: 4 }, opacity: 100 } });
   await signer(ps).sign();
-  assert.deepStrictEqual(ps.calls, ['getDocument', 'history:Signer', 'findSignatureLayer', 'removeLayer:7', 'readCompositeRegion', 'placeSignature']);
+  assert.deepStrictEqual(ps.calls, ['getDocument', 'history:Signer', 'findSignatureLayer', 'removeLayer:7', 'findSignatureLayer', 'readCompositeRegion', 'placeSignature']);
+  assert.strictEqual(ps.placed.length, 1);
+});
+
+test('sign supprime toutes les signatures existantes (calque dupliqué à la main) avant de mesurer', async () => {
+  const b = { left: 1, top: 1, width: 10, height: 4 };
+  const ps = makeFakePs({ existing: [{ id: 7, bounds: b, opacity: 100 }, { id: 8, bounds: b, opacity: 100 }] });
+  await signer(ps).sign();
+  const removals = ps.calls.filter(c => c.startsWith('removeLayer'));
+  assert.deepStrictEqual(removals, ['removeLayer:7', 'removeLayer:8']);
+  assert.ok(ps.calls.lastIndexOf('removeLayer:8') < ps.calls.indexOf('readCompositeRegion'));
   assert.strictEqual(ps.placed.length, 1);
 });
 
@@ -70,19 +80,29 @@ test('sign sans signature existante ne supprime rien', async () => {
   assert.deepStrictEqual(ps.calls, ['getDocument', 'history:Signer', 'findSignatureLayer', 'readCompositeRegion', 'placeSignature']);
 });
 
-test('sign pose la couleur choisie dans la boîte de computeBox avec l\'opacité des réglages', async () => {
+test('sign vise la zone visible de la boîte de computeBox, avec la couleur choisie et l\'opacité des réglages', async () => {
   const settings = { position: 'top-left', sizePercent: 20, opacity: 70, margin: 10 };
   const box = computeBox({ position: 'top-left', docWidth: 2000, docHeight: 1000, sizePercent: 20, margin: 10, sourceWidth: profile.width, sourceHeight: profile.height });
+  const visible = visibleRect(box, profile);
 
   const dark = makeFakePs({ gray: 20 });
   const r1 = await signer(dark, settings).sign();
-  assert.deepStrictEqual(dark.placed, [{ color: 'white', box, opacity: 70 }]);
+  assert.deepStrictEqual(dark.placed, [{ color: 'white', visible, opacity: 70 }]);
   assert.deepStrictEqual(r1.box, box);
 
   const light = makeFakePs({ gray: 235 });
   const r2 = await signer(light, settings).sign();
   assert.strictEqual(r2.color, 'black');
-  assert.deepStrictEqual(light.placed, [{ color: 'black', box, opacity: 70 }]);
+  assert.deepStrictEqual(light.placed, [{ color: 'black', visible, opacity: 70 }]);
+});
+
+test('sign lit les pixels dans la boîte complète (pas seulement la zone visible)', async () => {
+  const ps = makeFakePs();
+  let readBox = null;
+  const original = ps.readCompositeRegion;
+  ps.readCompositeRegion = async (d, b) => { readBox = b; return original(d, b); };
+  await signer(ps).sign();
+  assert.deepStrictEqual(readBox, computeBox({ ...DEFAULT_SETTINGS, docWidth: 2000, docHeight: 1000, sourceWidth: profile.width, sourceHeight: profile.height }));
 });
 
 test('sign utilise les réglages normalisés si le panneau en fournit de mauvais', async () => {
@@ -109,7 +129,7 @@ test('invert garde la position et l\'opacité d\'un calque déplacé par Luc, da
   const ps = makeFakePs({ existing, existingColor: 'white' });
   const r = await signer(ps).invert();
   assert.strictEqual(r.color, 'black');
-  assert.deepStrictEqual(ps.placed, [{ color: 'black', box: existing.bounds, opacity: 80 }]);
+  assert.deepStrictEqual(ps.placed, [{ color: 'black', visible: existing.bounds, opacity: 80 }]);
   assert.ok(ps.calls.indexOf('removeLayer:7') < ps.calls.indexOf('placeSignature'), 'suppression avant la pose');
   assert.deepStrictEqual(ps.calls.filter(c => c.startsWith('history:')), ['history:Inverser la signature']);
 });

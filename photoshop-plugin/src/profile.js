@@ -8,17 +8,20 @@ function decodeBase64(b64) {
   return bytes;
 }
 
-// raw: { width, height, maskWidth, maskHeight, alphaBase64, luminance: { white, black } }
+// raw: { width, height, maskWidth, maskHeight, alphaBase64, luminance: { white, black }, content: { left, top, width, height } }
 function decodeProfile(raw) {
   const alpha = decodeBase64(raw.alphaBase64);
   if (alpha.length !== raw.maskWidth * raw.maskHeight) {
     throw new Error(`masque de signature invalide : ${alpha.length} valeurs pour ${raw.maskWidth}x${raw.maskHeight}`);
   }
+  const c = raw.content;
+  if (!c || !(c.width > 0 && c.height > 0)) throw new Error('zone visible de la signature manquante');
   return {
     width: raw.width,
     height: raw.height,
     mask: { width: raw.maskWidth, height: raw.maskHeight, alpha },
     luminance: { white: raw.luminance.white, black: raw.luminance.black },
+    content: { left: c.left, top: c.top, width: c.width, height: c.height },
   };
 }
 

@@ -109,4 +109,16 @@ function chooseColor({ pixels, channels, width, height, profile, opacity }) {
   return { color: scores.white >= scores.black ? 'white' : 'black', scores, luma: den > 0 ? lumaSum / den : 128 };
 }
 
-module.exports = { chooseColor };
+// Couleur d'une signature déjà posée, d'après ses pixels : luminosité moyenne des pixels opaques.
+// Sert à « Inverser » sans mémoriser la couleur. Par défaut (rien d'opaque) : white.
+function dominantColor({ pixels, channels }) {
+  let sum = 0, n = 0;
+  for (let i = 0; i + channels - 1 < pixels.length; i += channels) {
+    if (channels === 4 && pixels[i + 3] < 128) continue;
+    sum += 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
+    n++;
+  }
+  return n === 0 || sum / n >= 127.5 ? 'white' : 'black';
+}
+
+module.exports = { chooseColor, dominantColor };

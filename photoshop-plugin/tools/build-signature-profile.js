@@ -38,6 +38,22 @@ function fullAlpha({ data, width, height }) {
   return { alpha: out, maskWidth: width, maskHeight: height };
 }
 
+// Zone visible du PNG (pixels d'alpha > 0) : Photoshop mesure un calque sur cette zone, sans les marges transparentes.
+function contentBounds({ data, width, height }) {
+  let x0 = Infinity, x1 = -1, y0 = Infinity, y1 = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] > 0) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  }
+  return { left: x0, top: y0, width: x1 - x0 + 1, height: y1 - y0 + 1 };
+}
+
 (async () => {
   const white = await readRgba('Signature_Blanc.png');
   const black = await readRgba('Signature_noir.png');
@@ -52,6 +68,7 @@ function fullAlpha({ data, width, height }) {
     maskHeight,
     alphaBase64: Buffer.from(alpha).toString('base64'),
     luminance: { white: meanLuminance(white), black: meanLuminance(black) },
+    content: contentBounds(white),
   };
   const target = path.join(assets, 'signature-profile.js');
   fs.writeFileSync(target, '// Généré par tools/build-signature-profile.js : ne pas modifier à la main.\nmodule.exports = ' + JSON.stringify(profile, null, 2) + ';\n');

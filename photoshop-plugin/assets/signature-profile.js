@@ -8,5 +8,11 @@ module.exports = {
   "luminance": {
     "white": 1,
     "black": 0
+  },
+  "content": {
+    "left": 104,
+    "top": 64,
+    "width": 600,
+    "height": 176
   }
 };

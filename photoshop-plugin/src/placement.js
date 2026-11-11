@@ -36,4 +36,17 @@ function computeBox({ position, docWidth, docHeight, sizePercent, margin, source
   return { left, top, width, height };
 }
 
-module.exports = { POSITIONS, computeBox };
+// Zone VISIBLE de la signature pour une boîte donnée : Photoshop mesure un calque sans les marges
+// transparentes du PNG, donc c'est cette zone qu'il faut viser (profile.content = zone visible du PNG source).
+function visibleRect(box, profile) {
+  const s = box.width / profile.width;
+  const c = profile.content;
+  return {
+    left: Math.round(box.left + c.left * s),
+    top: Math.round(box.top + c.top * s),
+    width: Math.round(c.width * s),
+    height: Math.round(c.height * s),
+  };
+}
+
+module.exports = { POSITIONS, computeBox, visibleRect };
