@@ -253,9 +253,12 @@ btnProcess.addEventListener('click', async () => {
   const toProcess = photos.filter(p => p.status !== 'done');
   let next = 0, finished = 0;
 
-  async function handle(photo) {
-    document.getElementById('card-' + photo.id)?.classList.remove('error');
-    setBadge(photo.id, 'processing', 'analyse...');
+  // Chemins de sortie réservés à l'avance : deux photos de même nom (dossiers sources
+  // différents, un seul dossier de sortie) ne doivent jamais écrire le même fichier,
+  // surtout avec le traitement en parallèle. Windows ignore la casse, la comparaison aussi.
+  const outPaths = new Map();
+  const usedOut = new Set();
+  for (const photo of toProcess) {
     const pathNorm  = photo.path.replace(/\//g, '\\');
     const lastSlash = pathNorm.lastIndexOf('\\');
     const dir       = lastSlash > -1 ? pathNorm.substring(0, lastSlash) : pathNorm;
@@ -264,7 +267,18 @@ btnProcess.addEventListener('click', async () => {
     const baseName  = dotIdx > -1 ? photo.name.slice(0, dotIdx) : photo.name;
     const origExt   = dotIdx > -1 ? photo.name.slice(dotIdx + 1).toLowerCase() : 'jpg';
     const outExt    = outputFormat === 'same' ? origExt : outputFormat;
-    const outPath   = outDir + '\\' + baseName + suffix + '.' + outExt;
+    let candidate = outDir + '\\' + baseName + suffix + '.' + outExt;
+    for (let n = 2; usedOut.has(candidate.toLowerCase()); n++) {
+      candidate = outDir + '\\' + baseName + suffix + '_' + n + '.' + outExt;
+    }
+    usedOut.add(candidate.toLowerCase());
+    outPaths.set(photo.id, candidate);
+  }
+
+  async function handle(photo) {
+    document.getElementById('card-' + photo.id)?.classList.remove('error');
+    setBadge(photo.id, 'processing', 'analyse...');
+    const outPath = outPaths.get(photo.id);
 
     let result;
     try {
