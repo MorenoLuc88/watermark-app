@@ -2,6 +2,10 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createPs } = require('../src/ps.js');
+const { createSigner } = require('../src/sign.js');
+const { loadProfile } = require('../src/profile.js');
+const { DEFAULT_SETTINGS } = require('../src/settings.js');
+const { visibleRect, computeBox } = require('../src/placement.js');
 
 function makeLayer(props = {}) {
   const layer = {
@@ -205,4 +209,57 @@ test('detectLayerColor lit les pixels du calque (zone visible) : signature blanc
     assert.deepStrictEqual(host.getPixelsArgs[0].sourceBounds, { left: 2663, top: 5121, right: 3462, bottom: 5356 });
     assert.strictEqual(host.getPixelsArgs[0].layerID, 9);
   }
+});
+
+// --- Bout en bout : createSigner + createPs sur un faux Photoshop. getDocument() renvoie une fiche (id, taille, mode) :
+// les autres fonctions doivent retrouver le vrai document par son id (bug réel : « layers is not iterable »).
+function makeEndToEnd() {
+  const doc = makeDoc({ layers: [makeLayer({ id: 1, name: 'Arrière-plan' })] });
+  const host = makeHost({ doc });
+  const read = host.photoshop.imaging.getPixels;
+  host.photoshop.imaging.getPixels = async (args) => {
+    // une lecture de calque (layerID) renvoie la signature blanche ; sinon le composite sombre
+    if (args.layerID !== undefined) {
+      args = { ...args };
+      host.getPixelsArgs.push(args);
+      return { sourceBounds: args.sourceBounds, imageData: { width: 2, height: 1, components: 4, async getData() { return Uint8Array.from([255, 255, 255, 255, 0, 0, 0, 0]); }, dispose() { host.disposed++; } } };
+    }
+    return read(args);
+  };
+  host.photoshop.app.documents = [doc];
+  const profile = loadProfile();
+  const ps = createPs(host);
+  return { doc, host, profile, signer: createSigner({ ps, profile, getSettings: () => DEFAULT_SETTINGS }) };
+}
+
+test('bout en bout : sign pose une signature « Signature LM » blanche sur la zone visible attendue', async () => {
+  const { doc, profile, signer } = makeEndToEnd();
+  const result = await signer.sign();
+  assert.strictEqual(result.color, 'white');
+  const sig = doc.layers.find(l => l.name === 'Signature LM');
+  assert.ok(sig, 'calque Signature LM créé');
+  const box = computeBox({ ...DEFAULT_SETTINGS, docWidth: doc.width, docHeight: doc.height, sourceWidth: profile.width, sourceHeight: profile.height });
+  const v = visibleRect(box, profile);
+  assert.strictEqual(sig.bounds.left, v.left);
+  assert.strictEqual(sig.bounds.top, v.top);
+  assert.ok(Math.abs((sig.bounds.right - sig.bounds.left) - v.width) <= 1);
+});
+
+test("bout en bout : un second sign remplace la signature au lieu d'en empiler une autre", async () => {
+  const { doc, signer } = makeEndToEnd();
+  await signer.sign();
+  await signer.sign();
+  assert.strictEqual(doc.layers.filter(l => l.name === 'Signature LM' && !l.deleted).length, 1);
+});
+
+test('bout en bout : invert passe de blanc à noir en gardant la position du calque', async () => {
+  const { doc, host, signer } = makeEndToEnd();
+  await signer.sign();
+  const before = doc.layers.find(l => l.name === 'Signature LM' && !l.deleted).bounds;
+  const result = await signer.invert();
+  assert.strictEqual(result.color, 'black');
+  assert.ok(host.calls.some(c => c.includes('token:Signature_noir.png')), 'PNG noir posé');
+  const after = doc.layers.find(l => l.name === 'Signature LM' && !l.deleted);
+  assert.strictEqual(after.bounds.left, before.left);
+  assert.strictEqual(after.bounds.top, before.top);
 });

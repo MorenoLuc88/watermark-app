@@ -39,6 +39,14 @@ function createPs({ photoshop, uxp }) {
     }, { commandName: name });
   }
 
+  // getDocument() ne renvoie qu'une fiche (id, taille, mode) : les opérations sur les calques retrouvent le vrai
+  // document par son id.
+  function liveDocument(info) {
+    const docs = app.documents;
+    for (let i = 0; i < docs.length; i++) if (docs[i].id === info.id) return docs[i];
+    throw new Error('Le document n’est plus ouvert');
+  }
+
   async function readPixels(args) {
     const result = await imaging.getPixels(args);
     const img = result.imageData;
@@ -76,7 +84,7 @@ function createPs({ photoshop, uxp }) {
     },
 
     async findSignatureLayer(doc) {
-      const layer = findLayer(doc.layers, l => l.name === LAYER_NAME);
+      const layer = findLayer(liveDocument(doc).layers, l => l.name === LAYER_NAME);
       if (!layer) return null;
       const b = layer.bounds;
       return {
@@ -88,7 +96,7 @@ function createPs({ photoshop, uxp }) {
 
     removeLayer(doc, layerId) {
       return inModal('Supprimer la signature', async () => {
-        const layer = findLayer(doc.layers, l => l.id === layerId);
+        const layer = findLayer(liveDocument(doc).layers, l => l.id === layerId);
         if (layer) layer.delete();
       });
     },
@@ -96,7 +104,7 @@ function createPs({ photoshop, uxp }) {
     // Couleur d'une signature déjà posée, d'après ses pixels
     detectLayerColor(doc, layerId) {
       return inModal('Lire la signature', async () => {
-        const layer = findLayer(doc.layers, l => l.id === layerId);
+        const layer = findLayer(liveDocument(doc).layers, l => l.id === layerId);
         const b = layer.bounds;
         const { pixels, channels } = await readPixels({
           documentID: doc.id,
@@ -123,7 +131,7 @@ function createPs({ photoshop, uxp }) {
           _options: { dialogOptions: 'dontDisplay' },
         }], {});
 
-        const layer = doc.activeLayers[0];
+        const layer = liveDocument(doc).activeLayers[0];
         const placed = layer.bounds;
         const pct = (visible.width / (placed.right - placed.left)) * 100;
         await layer.scale(pct, pct, constants.AnchorPosition.TOPLEFT);
